@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block commits that include likely secrets in staged changes.
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  exit 0
+fi
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMRTUXB)"
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+# Fail fast if secret-bearing file types are staged.
+if echo "${staged_files}" | grep -nE '(^|/)\.env($|\.)' | grep -v '\.env\.example$' >/dev/null; then
+  echo "[secret-scan] Commit blocked: staged .env file detected."
+  echo "Use .env.example for templates and keep real env files untracked."
+  exit 1
+fi
+
+if echo "${staged_files}" | grep -nE '\.(pem|p12|pfx)$|(^|/)(id_rsa|id_ed25519)$|\.key$' >/dev/null; then
+  echo "[secret-scan] Commit blocked: staged private key/certificate file detected."
+  exit 1
+fi
+
+added_lines="$(git diff --cached --unified=0 --no-color -- . \
+  ':(exclude)package-lock.json' \
+  ':(exclude)**/package-lock.json' \
+  | grep -E '^\+[^+]' \
+  | sed 's/^+//' || true)"
+
+if [[ -z "${added_lines}" ]]; then
+  exit 0
+fi
+
+# High-signal credential patterns.
+secret_pattern="AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[A-Za-z0-9_-]{35}|-----BEGIN (RSA|EC|OPENSSH|PGP|DSA) PRIVATE KEY-----|[A-Za-z_][A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*[\"'][^\"']{8,}[\"']"
+secret_hits="$(echo "${added_lines}" | grep -nE "${secret_pattern}" || true)"
+
+if [[ -n "${secret_hits}" ]]; then
+  echo "[secret-scan] Commit blocked: possible secret detected in staged content."
+  echo "Matched staged lines:"
+  echo "${secret_hits}" | sed 's/^/  /'
+  echo "If this is a false positive, move value to env/config secret store and commit a placeholder instead."
+  exit 1
+fi
+
+exit 0

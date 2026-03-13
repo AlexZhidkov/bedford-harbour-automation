@@ -1,16 +1,16 @@
 {
-  "name": "bedford-harbour-automation",
-  "private": true,
-  "version": "0.1.0",
-  "description": "Monorepo for Bedford Harbour automation scripts",
-  "workspaces": [
-    "automations/*"
-  ],
-  "scripts": {
-    "timesheet:run": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:run",
-    "timesheet:dry": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:dry"
-  },
-  "engines": {
-    "node": ">=20"
-  }
+    "name": "bedford-harbour-automation",
+    "private": true,
+    "version": "0.1.0",
+    "description": "Monorepo for Bedford Harbour automation scripts",
+    "workspaces": [
+        "automations/*"
+    ],
+    "scripts": {
+        "timesheet:run": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:run",
+        "timesheet:dry": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:dry"
+    },
+    "engines": {
+        "node": ">=20"
+    }
 }
