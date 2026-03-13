@@ -1,0 +1,18 @@
+{
+  "name": "@bedford-harbour/timesheet-notifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Timesheet reminder automation using OpenClaw hooks",
+  "main": "timesheet-reminder-orchestrator.js",
+  "type": "commonjs",
+  "scripts": {
+    "timesheet:run": "set -a; . /home/alex/.openclaw/.env; set +a; node timesheet-reminder-orchestrator.js",
+    "timesheet:dry": "set -a; . /home/alex/.openclaw/.env; set +a; DRY_RUN=1 node timesheet-reminder-orchestrator.js"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

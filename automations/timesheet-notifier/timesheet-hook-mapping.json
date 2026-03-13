@@ -1,0 +1,32 @@
+{
+    "presetsAppend": [
+        "gog",
+        "gmail"
+    ],
+    "mappingsAppend": [
+        {
+            "id": "timesheet-roster",
+            "match": {
+                "path": "timesheet-roster"
+            },
+            "action": "agent",
+            "wakeMode": "now",
+            "name": "Timesheet Roster Lookup",
+            "agentId": "hooks",
+            "sessionKey": "hook:timesheet:roster:{{payload.date}}",
+            "messageTemplate": "TIMESHEET_ROSTER_LOOKUP webhook\nReceived: {{now}}\n\nInputs\n- Spreadsheet ID: {{payload.spreadsheetId}}\n- Sheet Name: {{payload.sheetName}}\n- Range: {{payload.range}}\n- Date: {{payload.date}}\n- Today Column: {{payload.todayColumn}}\n- Missing Count: {{payload.missingCount}}\n\nInstruction\nUse the prompt template in askalx/timesheet-prompt-template.md section 1 (Roster Lookup).\nReturn strict JSON only with shape:\n{\"rows\":[{\"name\":\"\",\"checkTimesheet\":\"yes|no\",\"email\":\"\"}]}\nNo markdown, no extra text."
+        },
+        {
+            "id": "timesheet-email",
+            "match": {
+                "path": "timesheet-email"
+            },
+            "action": "agent",
+            "wakeMode": "now",
+            "name": "Timesheet Email Reminder",
+            "agentId": "hooks",
+            "sessionKey": "hook:timesheet:email:{{payload.date}}",
+            "messageTemplate": "TIMESHEET_SEND_EMAIL webhook\nReceived: {{now}}\n\nRecipient\n- Name: {{payload.toName}}\n- Email: {{payload.toEmail}}\n\nContext\n- Date: {{payload.date}}\n- Today Column: {{payload.todayColumn}}\n\nInstruction\nUse the prompt template in askalx/timesheet-prompt-template.md section 2 (Send Reminder Email).\nSend a concise reminder email via gmail preset, then return strict JSON only:\n{\"status\":\"sent\",\"to\":\"{{payload.toEmail}}\"}\nIf send fails, return:\n{\"status\":\"failed\",\"to\":\"{{payload.toEmail}}\",\"error\":\"reason\"}\nNo markdown, no extra text."
+        }
+    ]
+}
