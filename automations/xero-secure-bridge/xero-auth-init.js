@@ -1,7 +1,9 @@
 const crypto = require("node:crypto");
-const http = require("node:http");
 const { URL } = require("node:url");
-const { saveTokenPayload } = require("./token-store");
+const {
+  getOauthStateFilePath,
+  saveOauthPendingState,
+} = require("./token-store");
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -34,64 +36,23 @@ function getScopes() {
   ];
 }
 
-async function exchangeCodeForToken({
-  clientId,
-  clientSecret,
-  redirectUri,
-  code,
-  verifier,
-}) {
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: redirectUri,
-    code_verifier: verifier,
-  }).toString();
-
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch("https://identity.xero.com/connect/token", {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      authorization: `Basic ${basic}`,
-    },
-    body,
-  });
-
-  const json = await res.json();
-  if (!res.ok) {
-    const detail =
-      json && typeof json === "object" ? JSON.stringify(json) : String(json);
-    throw new Error(`Token exchange failed: ${res.status} ${detail}`);
-  }
-  return json;
-}
-
 async function run() {
   const clientId = requireEnv("XERO_CLIENT_ID");
-  const clientSecret = requireEnv("XERO_CLIENT_SECRET");
+  requireEnv("XERO_CLIENT_SECRET");
   const redirectUri = requireEnv("XERO_REDIRECT_URI");
   const tenantId = requireEnv("XERO_TENANT_ID");
-  const callbackPort = Number(process.env.XERO_OAUTH_CALLBACK_PORT || 8787);
   const redirect = new URL(redirectUri);
 
+  if (!["http:", "https:"].includes(redirect.protocol)) {
+    throw new Error("XERO_REDIRECT_URI must use http:// or https://");
+  }
   if (
-    !Number.isInteger(callbackPort) ||
-    callbackPort < 1 ||
-    callbackPort > 65535
+    redirect.protocol === "http:" &&
+    redirect.hostname !== "127.0.0.1" &&
+    redirect.hostname !== "localhost"
   ) {
-    throw new Error("XERO_OAUTH_CALLBACK_PORT must be a valid port");
-  }
-
-  if (redirect.protocol !== "http:") {
-    throw new Error("XERO_REDIRECT_URI must use http:// for local callback");
-  }
-  if (redirect.hostname !== "127.0.0.1" && redirect.hostname !== "localhost") {
-    throw new Error("XERO_REDIRECT_URI must use localhost or 127.0.0.1");
-  }
-  if (redirect.port !== String(callbackPort)) {
     throw new Error(
-      "XERO_REDIRECT_URI port must match XERO_OAUTH_CALLBACK_PORT",
+      "http:// redirect URIs must use localhost or 127.0.0.1; use https:// for remote callback",
     );
   }
 
@@ -113,72 +74,30 @@ async function run() {
   authorizeUrl.searchParams.set("code_challenge", challenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
 
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  saveOauthPendingState({
+    created_at: now,
+    expires_at: expiresAt,
+    state,
+    verifier,
+    tenantId,
+    redirectUri,
+    scopes,
+  });
+
   console.log("Open this URL in your browser and approve access:");
   console.log(authorizeUrl.toString());
   console.log("");
+  console.log("Bridge callback target:");
+  console.log(`${redirect.origin}${redirect.pathname}`);
+  console.log("");
   console.log(
-    `Listening for callback on ${redirect.origin}${redirect.pathname} ...`,
+    `Pending OAuth state saved to ${getOauthStateFilePath()} and expires in 15 minutes.`,
   );
-
-  const code = await new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      try {
-        const reqUrl = new URL(
-          req.url || "/",
-          `http://127.0.0.1:${callbackPort}`,
-        );
-        if (reqUrl.pathname !== redirect.pathname) {
-          res.statusCode = 404;
-          res.end("Not found");
-          return;
-        }
-
-        const incomingState = reqUrl.searchParams.get("state") || "";
-        const incomingCode = reqUrl.searchParams.get("code") || "";
-        if (!incomingCode || incomingState !== state) {
-          res.statusCode = 400;
-          res.end("Invalid callback");
-          server.close();
-          reject(new Error("Invalid callback state/code"));
-          return;
-        }
-
-        res.statusCode = 200;
-        res.setHeader("content-type", "text/plain; charset=utf-8");
-        res.end("Xero authorization complete. You can close this tab.");
-        server.close();
-        resolve(incomingCode);
-      } catch (err) {
-        server.close();
-        reject(err);
-      }
-    });
-
-    server.on("error", reject);
-    server.listen(callbackPort, "127.0.0.1");
-  });
-
-  const token = await exchangeCodeForToken({
-    clientId,
-    clientSecret,
-    redirectUri,
-    code,
-    verifier,
-  });
-
-  const now = Date.now();
-  const expiresAt = now + Number(token.expires_in || 0) * 1000;
-  saveTokenPayload({
-    tenantId,
-    scope: token.scope || scopes.join(" "),
-    access_token: token.access_token,
-    refresh_token: token.refresh_token,
-    token_type: token.token_type,
-    expires_at: expiresAt,
-    updated_at: now,
-  });
-
-  console.log("Xero token saved (encrypted).");
+  console.log(
+    "Make sure xero:serve is running and your redirect URI routes to this bridge endpoint.",
+  );
 }
 
 run().catch((err) => {

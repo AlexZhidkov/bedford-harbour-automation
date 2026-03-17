@@ -21,11 +21,25 @@ Secure local bridge that lets OpenClaw access Xero with strict controls:
 
 ## 2) Authorize Xero once
 
+Before starting auth, ensure the bridge callback endpoint is reachable from the internet over HTTPS (for example via Tailscale Funnel).
+
+Example with Funnel (run on the VM):
+
+- `sudo tailscale funnel 8790`
+
+Then set `XERO_REDIRECT_URI` to the public callback URL in your Xero app settings, for example:
+
+- `https://your-node.your-tailnet.ts.net/xero/callback`
+
 Run:
 
 - `npm run xero:auth`
 
-The script prints an authorization URL, opens a local callback listener, exchanges code for tokens, and writes encrypted token material to `XERO_TOKEN_FILE`.
+The script prints an authorization URL and stores encrypted pending OAuth state (PKCE verifier + state) on disk for 15 minutes.
+
+Share that authorization URL with your client. After they approve in Xero, Xero redirects to your bridge callback endpoint, and the bridge exchanges the code for tokens automatically.
+
+Successful callback writes encrypted token material to `XERO_TOKEN_FILE`.
 
 ## 3) Start bridge service
 
@@ -72,6 +86,7 @@ Supported actions:
 - Keep the bridge bound to loopback (`127.0.0.1`) unless you add network ACLs and TLS.
 - The server enforces loopback host binding and JSON-only requests.
 - Basic request rate limiting is enabled (`XERO_BRIDGE_RATE_LIMIT_PER_MIN`, default `60`).
+- Callback security relies on OAuth state + PKCE verification and a short-lived pending state file (`XERO_OAUTH_STATE_FILE`).
 - Never commit env files or token files.
 - Rotate `OPENCLAW_BRIDGE_TOKEN` and `OPENCLAW_BRIDGE_HMAC_SECRET` regularly.
 - If you suspect compromise, revoke Xero app tokens and rerun `npm run xero:auth`.

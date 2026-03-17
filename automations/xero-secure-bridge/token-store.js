@@ -6,6 +6,13 @@ function getTokenFilePath() {
   return process.env.XERO_TOKEN_FILE || "/home/alex/.openclaw/xero-token.enc";
 }
 
+function getOauthStateFilePath() {
+  return (
+    process.env.XERO_OAUTH_STATE_FILE ||
+    "/home/alex/.openclaw/xero-oauth-state.enc"
+  );
+}
+
 function getEncryptionKey() {
   const keyB64 = process.env.XERO_ENCRYPTION_KEY || "";
   if (!keyB64.trim()) {
@@ -52,23 +59,51 @@ function decryptJson(serialized) {
 }
 
 function saveTokenPayload(payload) {
-  const tokenFile = getTokenFilePath();
-  const dir = path.dirname(tokenFile);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const body = encryptJson(payload);
-  fs.writeFileSync(tokenFile, body, { mode: 0o600 });
+  saveEncryptedJson(getTokenFilePath(), payload);
 }
 
 function loadTokenPayload() {
-  const tokenFile = getTokenFilePath();
-  if (!fs.existsSync(tokenFile)) {
+  return loadEncryptedJson(getTokenFilePath());
+}
+
+function saveOauthPendingState(payload) {
+  saveEncryptedJson(getOauthStateFilePath(), payload);
+}
+
+function loadOauthPendingState() {
+  return loadEncryptedJson(getOauthStateFilePath());
+}
+
+function deleteOauthPendingState() {
+  deleteEncryptedFile(getOauthStateFilePath());
+}
+
+function saveEncryptedJson(filePath, payload) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const body = encryptJson(payload);
+  fs.writeFileSync(filePath, body, { mode: 0o600 });
+}
+
+function loadEncryptedJson(filePath) {
+  if (!fs.existsSync(filePath)) {
     return null;
   }
-  const body = fs.readFileSync(tokenFile, "utf8");
+  const body = fs.readFileSync(filePath, "utf8");
   return decryptJson(body);
 }
 
+function deleteEncryptedFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
 module.exports = {
+  deleteOauthPendingState,
+  getOauthStateFilePath,
   loadTokenPayload,
+  loadOauthPendingState,
+  saveOauthPendingState,
   saveTokenPayload,
 };

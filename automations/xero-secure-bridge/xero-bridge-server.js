@@ -1,6 +1,12 @@
 const crypto = require("node:crypto");
 const http = require("node:http");
-const { loadTokenPayload, saveTokenPayload } = require("./token-store");
+const { URL } = require("node:url");
+const {
+  deleteOauthPendingState,
+  loadOauthPendingState,
+  loadTokenPayload,
+  saveTokenPayload,
+} = require("./token-store");
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -39,6 +45,109 @@ function assertUuid(value, label) {
   ) {
     throw new Error(`${label} must be a valid UUID`);
   }
+}
+
+function getScopes() {
+  const raw = process.env.XERO_SCOPES;
+  if (raw && raw.trim()) {
+    return raw
+      .split(/\s+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return [
+    "offline_access",
+    "accounting.transactions.read",
+    "accounting.contacts.read",
+  ];
+}
+
+async function exchangeCodeForToken({
+  clientId,
+  clientSecret,
+  redirectUri,
+  code,
+  verifier,
+}) {
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: verifier,
+  }).toString();
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch("https://identity.xero.com/connect/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      authorization: `Basic ${basic}`,
+    },
+    body,
+  });
+
+  const token = await res.json();
+  if (!res.ok) {
+    const detail =
+      token && typeof token === "object"
+        ? JSON.stringify(token)
+        : String(token);
+    throw new Error(`Token exchange failed: ${res.status} ${detail}`);
+  }
+  return token;
+}
+
+async function completeOauthCallback({ code, state }) {
+  const pending = loadOauthPendingState();
+  if (!pending) {
+    throw new Error("No pending OAuth state. Run xero:auth first.");
+  }
+
+  if (!pending.state || !pending.verifier || !pending.redirectUri) {
+    throw new Error("Pending OAuth state is invalid. Run xero:auth again.");
+  }
+
+  const now = Date.now();
+  if (!pending.expires_at || now > Number(pending.expires_at)) {
+    deleteOauthPendingState();
+    throw new Error("Pending OAuth state expired. Run xero:auth again.");
+  }
+
+  if (!constantTimeEqual(String(state || ""), String(pending.state))) {
+    throw new Error("Invalid OAuth state");
+  }
+
+  const clientId = requireEnv("XERO_CLIENT_ID");
+  const clientSecret = requireEnv("XERO_CLIENT_SECRET");
+  const tenantId =
+    typeof pending.tenantId === "string" && pending.tenantId.trim()
+      ? pending.tenantId.trim()
+      : requireEnv("XERO_TENANT_ID");
+  const scopes =
+    Array.isArray(pending.scopes) && pending.scopes.length > 0
+      ? pending.scopes
+      : getScopes();
+
+  const token = await exchangeCodeForToken({
+    clientId,
+    clientSecret,
+    redirectUri: pending.redirectUri,
+    code,
+    verifier: pending.verifier,
+  });
+
+  const expiresAt = now + Number(token.expires_in || 0) * 1000;
+  saveTokenPayload({
+    tenantId,
+    scope: token.scope || scopes.join(" "),
+    access_token: token.access_token,
+    refresh_token: token.refresh_token,
+    token_type: token.token_type,
+    expires_at: expiresAt,
+    updated_at: now,
+  });
+
+  deleteOauthPendingState();
 }
 
 function readJsonBody(req) {
@@ -290,6 +399,8 @@ function verifyHmacIfEnabled(headers, rawBody) {
 async function main() {
   const host = (process.env.XERO_BRIDGE_HOST || "127.0.0.1").trim();
   const port = Number(process.env.XERO_BRIDGE_PORT || 8790);
+  const redirectUri = new URL(requireEnv("XERO_REDIRECT_URI"));
+  const callbackPath = redirectUri.pathname;
   const bridgeToken = requireEnv("OPENCLAW_BRIDGE_TOKEN");
   const requestsPerMinute = Number(
     process.env.XERO_BRIDGE_RATE_LIMIT_PER_MIN || 60,
@@ -333,6 +444,38 @@ async function main() {
       if (req.method === "GET" && req.url === "/health") {
         finish(200, { ok: true });
         return;
+      }
+
+      if (req.method === "GET") {
+        const reqUrl = new URL(
+          req.url || "/",
+          `http://${req.headers.host || "127.0.0.1"}`,
+        );
+        if (reqUrl.pathname === callbackPath) {
+          const code = reqUrl.searchParams.get("code") || "";
+          const state = reqUrl.searchParams.get("state") || "";
+          const oauthError = reqUrl.searchParams.get("error") || "";
+
+          if (oauthError) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "text/plain; charset=utf-8");
+            res.end(`Xero authorization failed: ${oauthError}`);
+            return;
+          }
+
+          if (!code || !state) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "text/plain; charset=utf-8");
+            res.end("Missing code/state in callback");
+            return;
+          }
+
+          await completeOauthCallback({ code, state });
+          res.statusCode = 200;
+          res.setHeader("content-type", "text/plain; charset=utf-8");
+          res.end("Xero authorization complete. You can close this tab.");
+          return;
+        }
       }
 
       if (req.method !== "POST" || req.url !== "/xero/query") {
@@ -388,6 +531,7 @@ async function main() {
       const message =
         err && err.message ? String(err.message) : "Request failed";
       if (
+        message.startsWith("Token exchange failed") ||
         message.startsWith("Xero API error") ||
         message.startsWith("Token refresh failed")
       ) {
