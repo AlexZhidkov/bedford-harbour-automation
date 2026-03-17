@@ -5,6 +5,7 @@ This repository stores automation projects used on the Bedford Harbour VM and re
 ## Projects
 
 - `automations/timesheet-notifier`: Scrapes missing timesheets and sends reminder emails through OpenClaw hooks.
+- `automations/xero-secure-bridge`: Secure local Xero bridge for OpenClaw (OAuth PKCE + encrypted token storage).
 
 ## Quick Start
 
@@ -16,6 +17,10 @@ This repository stores automation projects used on the Bedford Harbour VM and re
    - `npm run timesheet:run`
 4. Dry run:
    - `npm run timesheet:dry`
+5. Authorize Xero once:
+   - `npm run xero:auth`
+6. Start Xero bridge:
+   - `npm run xero:serve`
 
 ## Publish to GitHub
 

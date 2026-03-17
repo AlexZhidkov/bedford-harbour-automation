@@ -1,0 +1,15 @@
+{
+    "name": "@bedford-harbour/xero-secure-bridge",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Secure local bridge for OpenClaw to access Xero",
+    "type": "commonjs",
+    "main": "xero-bridge-server.js",
+    "scripts": {
+        "xero:auth": "set -a; . /home/alex/.openclaw/.env; set +a; node xero-auth-init.js",
+        "xero:serve": "set -a; . /home/alex/.openclaw/.env; set +a; node xero-bridge-server.js"
+    },
+    "engines": {
+        "node": ">=20"
+    }
+}

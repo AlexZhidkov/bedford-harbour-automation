@@ -8,7 +8,9 @@
     ],
     "scripts": {
         "timesheet:run": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:run",
-        "timesheet:dry": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:dry"
+        "timesheet:dry": "npm --workspace @bedford-harbour/timesheet-notifier run timesheet:dry",
+        "xero:auth": "npm --workspace @bedford-harbour/xero-secure-bridge run xero:auth",
+        "xero:serve": "npm --workspace @bedford-harbour/xero-secure-bridge run xero:serve"
     },
     "engines": {
         "node": ">=20"
