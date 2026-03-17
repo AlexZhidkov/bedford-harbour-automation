@@ -396,6 +396,20 @@ function verifyHmacIfEnabled(headers, rawBody) {
   }
 }
 
+function requireBridgeBearerAuth(req, bridgeToken) {
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return { ok: false, status: 401, error: "Unauthorized" };
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+  if (!constantTimeEqual(token, bridgeToken)) {
+    return { ok: false, status: 403, error: "Forbidden" };
+  }
+
+  return { ok: true };
+}
+
 async function main() {
   const host = (process.env.XERO_BRIDGE_HOST || "127.0.0.1").trim();
   const port = Number(process.env.XERO_BRIDGE_PORT || 8790);
@@ -443,6 +457,42 @@ async function main() {
     try {
       if (req.method === "GET" && req.url === "/health") {
         finish(200, { ok: true });
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/status") {
+        const auth = requireBridgeBearerAuth(req, bridgeToken);
+        if (!auth.ok) {
+          finish(auth.status, { error: auth.error });
+          return;
+        }
+
+        const now = Date.now();
+        const tokenState = loadTokenPayload();
+        const pending = loadOauthPendingState();
+
+        finish(200, {
+          ok: true,
+          authorized: Boolean(tokenState?.access_token),
+          tokenExpiresAt: tokenState?.expires_at || null,
+          tokenExpiresInSeconds:
+            tokenState?.expires_at &&
+            Number.isFinite(Number(tokenState.expires_at))
+              ? Math.max(
+                  0,
+                  Math.floor((Number(tokenState.expires_at) - now) / 1000),
+                )
+              : null,
+          oauthPending: Boolean(pending?.state),
+          oauthPendingExpiresAt: pending?.expires_at || null,
+          oauthPendingExpiresInSeconds:
+            pending?.expires_at && Number.isFinite(Number(pending.expires_at))
+              ? Math.max(
+                  0,
+                  Math.floor((Number(pending.expires_at) - now) / 1000),
+                )
+              : null,
+        });
         return;
       }
 
@@ -496,15 +546,9 @@ async function main() {
         return;
       }
 
-      const authHeader = req.headers.authorization || "";
-      if (!authHeader.startsWith("Bearer ")) {
-        finish(401, { error: "Unauthorized" });
-        return;
-      }
-
-      const token = authHeader.slice("Bearer ".length).trim();
-      if (!constantTimeEqual(token, bridgeToken)) {
-        finish(403, { error: "Forbidden" });
+      const auth = requireBridgeBearerAuth(req, bridgeToken);
+      if (!auth.ok) {
+        finish(auth.status, { error: auth.error });
         return;
       }
 

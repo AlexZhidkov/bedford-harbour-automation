@@ -51,6 +51,21 @@ The server listens on `XERO_BRIDGE_HOST:XERO_BRIDGE_PORT`.
 
 ## 4) Call contract (from OpenClaw hook/tool)
 
+Bridge status endpoint (auth required):
+
+- `GET /status`
+
+Headers:
+
+- `authorization: Bearer <OPENCLAW_BRIDGE_TOKEN>`
+
+Response summary:
+
+- `authorized`: encrypted Xero token exists
+- `tokenExpiresInSeconds`: time until access token expiry (refresh is automatic)
+- `oauthPending`: whether an auth flow is currently waiting for callback
+- `oauthPendingExpiresInSeconds`: time left before pending state expires
+
 Endpoint:
 
 - `POST /xero/query`
