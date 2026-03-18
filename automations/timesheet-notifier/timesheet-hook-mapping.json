@@ -27,6 +27,18 @@
             "agentId": "hooks",
             "sessionKey": "hook:timesheet:email:{{payload.date}}",
             "messageTemplate": "TIMESHEET_SEND_EMAIL webhook\nReceived: {{now}}\n\nRecipient\n- Name: {{payload.toName}}\n- Email: {{payload.toEmail}}\n\nContext\n- Date: {{payload.date}}\n- Today Column: {{payload.todayColumn}}\n\nInstruction\nUse the prompt template in askalx/timesheet-prompt-template.md section 2 (Send Reminder Email).\nSend a concise reminder email via gmail preset, then return strict JSON only:\n{\"status\":\"sent\",\"to\":\"{{payload.toEmail}}\"}\nIf send fails, return:\n{\"status\":\"failed\",\"to\":\"{{payload.toEmail}}\",\"error\":\"reason\"}\nNo markdown, no extra text."
+        },
+        {
+            "id": "xero-bridge-query",
+            "match": {
+                "path": "xero-query"
+            },
+            "action": "agent",
+            "wakeMode": "now",
+            "name": "Xero Secure Bridge Query",
+            "agentId": "hooks",
+            "sessionKey": "hook:xero:query:{{payload.action}}",
+            "messageTemplate": "XERO_SECURE_BRIDGE_QUERY webhook\nReceived: {{now}}\n\nInput payload\n- action: {{payload.action}}\n- params: {{payload.params}}\n\nSecurity requirements\n- Use only this endpoint: http://127.0.0.1:8790/xero/query\n- Use header Authorization: Bearer ${OPENCLAW_BRIDGE_TOKEN}\n- Use Content-Type: application/json\n- If OPENCLAW_BRIDGE_HMAC_SECRET is present, add:\n  - x-timestamp: current unix seconds\n  - x-signature: hex(HMAC_SHA256(OPENCLAW_BRIDGE_HMAC_SECRET, `${x-timestamp}.${rawBody}`))\n\nAllowed actions only\n- list_overdue_invoices\n- list_unpaid_bills\n- get_contact\n\nRequest body to bridge (strict)\n{\"action\":\"{{payload.action}}\",\"params\":{{payload.params}}}\n\nReturn strict JSON only:\n{\"ok\":true,\"action\":\"...\",\"data\":{...}}\nIf bridge call fails, return strict JSON:\n{\"ok\":false,\"action\":\"{{payload.action}}\",\"error\":\"reason\"}\nNo markdown, no extra text."
         }
     ]
 }
