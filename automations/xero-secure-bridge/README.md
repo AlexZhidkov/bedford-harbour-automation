@@ -92,9 +92,25 @@ Body:
 
 Supported actions:
 
+- `get_bas_report`
 - `list_overdue_invoices`
 - `list_unpaid_bills`
 - `get_contact`
+
+`get_bas_report` accepts an optional `reportId` param. Without it, the bridge returns the list of published BAS reports for the authorized AU organization. With `reportId`, the bridge fetches the details for that published BAS report.
+
+Example BAS report request:
+
+```json
+{
+  "action": "get_bas_report",
+  "params": {
+    "reportId": "3d0a1240-e606-4fae-a823-77bcf79d5e79"
+  }
+}
+```
+
+If you add BAS support to an existing setup, make sure `XERO_SCOPES` includes `accounting.reports.taxreports.read`, then rerun `npm run xero:auth` so Xero issues a token with that additional scope.
 
 ## Security notes
 

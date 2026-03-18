@@ -58,7 +58,9 @@ function getScopes() {
   return [
     "offline_access",
     "accounting.transactions.read",
+    "accounting.invoices.read",
     "accounting.contacts.read",
+    "accounting.reports.taxreports.read",
   ];
 }
 
@@ -360,6 +362,24 @@ async function handleAction(action, params, state) {
         query: { where, page: 1 },
       }).then((result) => ({
         contacts: Array.isArray(result?.Contacts) ? result.Contacts : [],
+      }));
+    }
+
+    case "get_bas_report": {
+      const reportId =
+        typeof params.reportId === "string" ? params.reportId.trim() : "";
+      if (reportId) {
+        assertUuid(reportId, "reportId");
+      }
+
+      return xeroApiRequest({
+        state,
+        path: reportId
+          ? `/api.xro/2.0/Reports/${reportId}`
+          : "/api.xro/2.0/Reports",
+        query: {},
+      }).then((result) => ({
+        reports: Array.isArray(result?.Reports) ? result.Reports : [],
       }));
     }
 
