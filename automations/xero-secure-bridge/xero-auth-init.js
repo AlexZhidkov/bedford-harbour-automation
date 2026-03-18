@@ -31,7 +31,8 @@ function getScopes() {
   }
   return [
     "offline_access",
-    "accounting.transactions.read",
+    "accounting.banktransactions.read",
+    "accounting.invoices.read",
     "accounting.contacts.read",
     "accounting.reports.taxreports.read",
   ];
